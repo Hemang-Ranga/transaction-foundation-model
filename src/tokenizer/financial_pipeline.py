@@ -237,7 +237,12 @@ class FinancialTokenizerPipeline(TokenizerPipeline):
             .str.upper()
             .str.replace(r"[^A-Z0-9\s\-]", "", regex=True)
         )
-        df["merch_hash"] = merch_clean.hash_values()
+        # cuDF 24.08+: hash_values() moved from Series to DataFrame
+        if hasattr(merch_clean, 'hash_values'):
+            df["merch_hash"] = merch_clean.hash_values()
+        else:
+            df["merch_hash"] = merch_clean.to_frame("_tmp").hash_values()
+
 
         mcc = df["mcc"].fillna(-1).astype(int)
         df["mcc_int"] = mcc
@@ -275,7 +280,9 @@ class FinancialTokenizerPipeline(TokenizerPipeline):
             df["time_full"] = dt
         df = df.sort_values(["user", "card", "time_full"])
         td = df.groupby(["user", "card"])["time_full"].diff()
-        td_seconds = td.dt.total_seconds().fillna(0).clip(0)
+        # cuDF 24.08 compat: TimedeltaProperties lacks .total_seconds()
+        # Convert timedelta → nanoseconds (int64) → seconds
+        td_seconds = (td.astype("int64") / 1_000_000_000).fillna(0).clip(0)
         df["time_delta_s"] = td_seconds
 
         return df.reset_index(drop=True)

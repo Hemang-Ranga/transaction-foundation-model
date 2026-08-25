@@ -7,3 +7,8 @@ tmp_nb_rerun_results/
 tmp_nb_test_results/
 src/__pycache__/
 src/tokenizer/__pycache__/
+data_ieee/
+models/
+.ipynb_checkpoints/
+*.log
+cufile.log

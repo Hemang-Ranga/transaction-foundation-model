@@ -1,0 +1,9 @@
+srun --gres=gpu:1 --mem=128G -c 6 -t 04:00:00 --pty bash
+
+conda activate tfm
+
+echo "CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES"
+python -c "import torch; print(f'Assigned GPU: {torch.cuda.get_device_name(0)}'); print(f'Free VRAM: {torch.cuda.mem_get_info(0)[0]/1e9:.1f} GB')"
+export CUDA_VISIBLE_DEVICES=1
+
+jupyter notebook --no-browser --port=8888 --ip=0.0.0.0

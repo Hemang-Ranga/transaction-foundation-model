@@ -134,6 +134,9 @@ optimizer:
   lr: 0.0002
   weight_decay: 0.077
 
+clip_grad_norm:
+  max_norm: 1.0
+
 lr_scheduler:
   lr_decay_style: cosine
   lr_warmup_steps: 10

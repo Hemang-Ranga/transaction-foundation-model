@@ -79,6 +79,39 @@ def main():
           f"{cfg.step_scheduler.local_batch_size} local")
     print("=" * 60 + "\n")
 
+    # HACK: Fix FSDP2 meta device initialization bug for HuggingFace models
+    # FSDP2 materializes from `meta` device but HF models lack `reset_parameters()`.
+    # We monkey-patch FSDP2Manager.parallelize to materialize and initialize on CUDA first.
+    import torch
+    from nemo_automodel.components.distributed.fsdp2 import FSDP2Manager
+    original_parallelize = FSDP2Manager.parallelize
+    
+    def patched_parallelize(self, model):
+        # Move off meta device
+        device = torch.device("cuda", torch.cuda.current_device())
+        model.to_empty(device=device)
+        
+        @torch.no_grad()
+        def _init_weights(module):
+            if isinstance(module, torch.nn.Linear):
+                torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+                if getattr(module, "bias", None) is not None:
+                    torch.nn.init.zeros_(module.bias)
+            elif isinstance(module, torch.nn.Embedding):
+                torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+                if getattr(module, "padding_idx", None) is not None:
+                    module.weight[module.padding_idx].zero_()
+            elif "Norm" in module.__class__.__name__:
+                if hasattr(module, "weight") and module.weight is not None:
+                    torch.nn.init.ones_(module.weight)
+                if getattr(module, "bias", None) is not None:
+                    torch.nn.init.zeros_(module.bias)
+                    
+        model.apply(_init_weights)
+        return original_parallelize(self, model)
+        
+    FSDP2Manager.parallelize = patched_parallelize
+
     recipe = TrainFinetuneRecipeForNextTokenPrediction(cfg)
     recipe.setup()
     recipe.run_train_validation_loop()
